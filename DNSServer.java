@@ -2,6 +2,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.Arrays;
 
 public class DNSServer {
     private static final String GOOGLE_DNS = "8.8.8.8";
@@ -20,13 +21,6 @@ public class DNSServer {
 
             DNSMessage dnsRequest = DNSMessage.decodeMessage(buffer);
 
-            //if the cachedanswer is null or expired {
-//            DNSMessage dnsResponse = dnsRequest.buildResponse(dnsRequest, new DNSRecord[]);//use cached answers
-//            byte[] response = ;
-            // use pkt.setData(response)
-            // }
-
-            // If DNSRecord cached answer (cache.get(dnsRequest) isn't null or expired):
             InetAddress svar_host = InetAddress.getByName(GOOGLE_DNS);
             pkt.setAddress(svar_host);
             pkt.setPort(GOOGLE_PORT);
@@ -37,11 +31,14 @@ public class DNSServer {
             DNSMessage dnsResponse = DNSMessage.decodeMessage(buffer);
 
             //if(DNS r Code is R_NoError) cache it.
+            DNSHeader requestHeader = dnsRequest.getHeaderForResponse();
+            DNSHeader responseHeader = dnsResponse.getHeaderForResponse();
+            if(requestHeader.getrCode() == responseHeader.getrCode()) {
+                pkt.setAddress(requestAddress);
+                pkt.setPort(requestPort);
 
-            pkt.setAddress(requestAddress);
-            pkt.setPort(requestPort);
-
-            socket.send(pkt);
+                socket.send(pkt);
+            }
         }
     }
 }

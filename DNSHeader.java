@@ -36,7 +36,8 @@ public class DNSHeader {
     int rCode;
 
     static DNSHeader decodeHeader(InputStream inpStr) throws IOException {
-        ByteBuffer buffer = ByteBuffer.wrap(inpStr.readNBytes(12));
+        byte[] buff = inpStr.readNBytes(12);
+        ByteBuffer buffer = ByteBuffer.wrap(buff);
         DNSHeader header = new DNSHeader();
 
         // Extracts values of the shorts from the messages in order.
@@ -97,6 +98,10 @@ public class DNSHeader {
 
     int getANCount() {
         return ANCount;
+    }
+
+    int getrCode() {
+        return rCode;
     }
 
     @Override

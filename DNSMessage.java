@@ -14,8 +14,9 @@ public class DNSMessage {
     DNSRecord[] answerRecords;
     DNSRecord[] authority;
     DNSRecord[] additional;
+    static byte[] messageBytes;
 
-    private byte[] messageBytes;
+    int troubleshoot = 0;
 
     /*
     an array of questions
@@ -36,9 +37,9 @@ public class DNSMessage {
     }
 
     static DNSMessage decodeMessage(byte[] bytes) throws IOException {
+        messageBytes = bytes;
         DNSMessage msg = new DNSMessage();
         ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-        bais.read(bytes);
 
         msg.header = DNSHeader.decodeHeader(bais);
         int qd = msg.header.getQDCount();
@@ -64,14 +65,14 @@ public class DNSMessage {
     String[] readDomainName(InputStream inpStr) throws IOException {
         // domain name starts at 0xc0
         List<String> domainName = new ArrayList<>();
-        char totalVal;
+        char charVal;
         while(true) {
-            int len = inpStr.read();
-            if(len == 0) break;
-            if((len & 0xc0) == 0xc0) {
-                int val = inpStr.read();
-                totalVal = (char) (((val & 0x3f) << 8) | val);
-                domainName.addAll(Arrays.asList(readDomainName(totalVal)));
+            int leftOffsetVal = inpStr.read();
+            if(leftOffsetVal == 0) break;
+            if((leftOffsetVal & 0xc0) == 0xc0) {
+                int byteRead = inpStr.read();
+                charVal = (char) (((leftOffsetVal & 0x3f) << 8) | byteRead);
+                domainName.addAll(Arrays.asList(readDomainName(charVal)));
             }
         }
         return domainName.toArray(new String[0]);
@@ -79,6 +80,7 @@ public class DNSMessage {
     // Read the pieces of a domain name starting from the current position of the input stream
 
     String[] readDomainName(int firstByte) throws IOException {
+
         ByteArrayInputStream bais = new ByteArrayInputStream(messageBytes, firstByte, messageBytes.length - firstByte);
 
         return readDomainName(bais);
