@@ -66,12 +66,13 @@ public class DNSHeader {
         DNSHeader requestHeader = request.getHeaderForResponse();
         DNSHeader responseHeader = response.getHeaderForResponse();
 
-        responseHeader.QR = requestHeader.QR;
+        responseHeader.ID = requestHeader.ID;  // Copy the ID
+        responseHeader.QR = true;  // This is a response
         responseHeader.opCode = requestHeader.opCode;
         responseHeader.AA = requestHeader.AA;
         responseHeader.TC = requestHeader.TC;
         responseHeader.RD = requestHeader.RD;
-        responseHeader.RA = requestHeader.RA;
+        responseHeader.RA = true;  // Recursion available
         responseHeader.Z = requestHeader.Z;
         responseHeader.AD = requestHeader.AD;
         responseHeader.rCode = requestHeader.rCode;
@@ -102,6 +103,37 @@ public class DNSHeader {
 
     int getrCode() {
         return rCode;
+    }
+
+    void setQDCount(short count) {
+        QDCount = count;
+    }
+
+    void setANCount(short count) {
+        ANCount = count;
+    }
+
+    void setNSCount(short count) {
+        NSCount = count;
+    }
+
+    void setARCount(short count) {
+        ARCount = count;
+    }
+
+    void rebuildFlags() {
+        // Rebuild the flags field from individual flag values
+        flags = 0;
+        if (QR) flags |= 0x8000;
+        flags |= ((opCode & 0x0f) << 11);
+        if (AA) flags |= 0x0400;
+        if (TC) flags |= 0x0200;
+        if (RD) flags |= 0x0100;
+        if (RA) flags |= 0x0080;
+        if (Z) flags |= 0x0040;
+        if (AD) flags |= 0x0020;
+        if (CD) flags |= 0x0010;
+        flags |= (rCode & 0x0f);
     }
 
     @Override

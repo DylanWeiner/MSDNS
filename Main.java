@@ -1,7 +1,7 @@
 import java.io.IOException;
 
 public class Main {
-    void main() {
+    public static void main(String[] args) {
         try {
             new DNSServer().run();
         } catch (IOException e) {

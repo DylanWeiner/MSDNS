@@ -63,16 +63,25 @@ public class DNSMessage {
     }
 
     String[] readDomainName(InputStream inpStr) throws IOException {
-        // domain name starts at 0xc0
+        // domain name is read as length-prefixed labels, terminated with 0
         List<String> domainName = new ArrayList<>();
-        char charVal;
         while(true) {
-            int leftOffsetVal = inpStr.read();
-            if(leftOffsetVal == 0) break;
-            if((leftOffsetVal & 0xc0) == 0xc0) {
-                int byteRead = inpStr.read();
-                charVal = (char) (((leftOffsetVal & 0x3f) << 8) | byteRead);
-                domainName.addAll(Arrays.asList(readDomainName(charVal)));
+            int length = inpStr.read();
+            if(length == 0) {
+                // End of domain name
+                break;
+            } else if((length & 0xc0) == 0xc0) {
+                // Compression pointer - top 2 bits are 11
+                int secondByte = inpStr.read();
+                int pointerOffset = ((length & 0x3f) << 8) | secondByte;
+                // Recursively read the domain from the pointer location
+                domainName.addAll(Arrays.asList(readDomainName(pointerOffset)));
+                break;  // Pointer ends the name
+            } else {
+                // Normal label - read 'length' bytes
+                byte[] labelBytes = new byte[length];
+                inpStr.read(labelBytes);
+                domainName.add(new String(labelBytes));
             }
         }
         return domainName.toArray(new String[0]);
@@ -94,7 +103,9 @@ public class DNSMessage {
         msg.answerRecords = answers;
         msg.authority = new DNSRecord[0];
         msg.additional = new DNSRecord[0];
-
+        
+        // Create a new header for the response
+        msg.header = new DNSHeader();
         msg.header = DNSHeader.buildHeaderForResponse(request, msg);
 
         return msg;
@@ -104,25 +115,77 @@ public class DNSMessage {
     byte[] toBytes() throws IOException {
         // Call the write bytes functions from the other classes.
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        
+        // Update header counts before writing
+        header.setQDCount((short) questions.length);
+        header.setANCount((short) answerRecords.length);
+        header.setNSCount((short) authority.length);
+        header.setARCount((short) additional.length);
+        header.rebuildFlags();
+        
         header.writeBytes(bos);
+        
+        // Create a map to track domain names for compression
+        HashMap<String, Integer> domainLocations = new HashMap<>();
 
+        // Write questions without compression in the map (but still record them)
         for (DNSQuestion q : questions) {
-            q.writeBytes(bos, null);
+            int startPos = bos.size();
+            String fullDomain = String.join(".", q.domain);
+            if (!domainLocations.containsKey(fullDomain)) {
+                domainLocations.put(fullDomain, startPos);
+            }
+            q.writeBytes(bos, null);  // Don't use compression for questions
         }
+        
+        // Write answers with compression
         for (DNSRecord rec : answerRecords) {
-            rec.writeBytes(bos, null);
+            rec.writeBytes(bos, domainLocations);
         }
         for (DNSRecord rec : authority) {
-            rec.writeBytes(bos, null);
+            rec.writeBytes(bos, domainLocations);
         }
         for (DNSRecord rec : additional) {
-            rec.writeBytes(bos, null);
+            rec.writeBytes(bos, domainLocations);
         }
         return bos.toByteArray();
     } // Get the bytes to put in a packet and send back
 
-    static void writeDomainName(ByteArrayOutputStream byteStream, HashMap<String,Integer> domainLocations, String[] domainPieces) {
-
+    static void writeDomainName(ByteArrayOutputStream byteStream, HashMap<String,Integer> domainLocations, String[] domainPieces) throws IOException {
+        if (domainPieces == null || domainPieces.length == 0) {
+            // Write just the root domain (0 byte)
+            byteStream.write(0);
+            return;
+        }
+        
+        // Build the full domain name for checking compression
+        StringBuilder fullDomain = new StringBuilder();
+        for (int i = 0; i < domainPieces.length; i++) {
+            if (i > 0) fullDomain.append(".");
+            fullDomain.append(domainPieces[i]);
+        }
+        
+        // Check if we've already written this domain (for compression)
+        if (domainLocations != null && domainLocations.containsKey(fullDomain.toString())) {
+            // Write a pointer to the previous location
+            int location = domainLocations.get(fullDomain.toString());
+            int pointer = 0xC000 | location;  // 0xC0 signals a pointer
+            byteStream.write((pointer >> 8) & 0xFF);
+            byteStream.write(pointer & 0xFF);
+        } else {
+            // First time seeing this domain - write it out with DNS encoding
+            int startPos = byteStream.size();
+            if (domainLocations != null) {
+                domainLocations.put(fullDomain.toString(), startPos);
+            }
+            
+            for (String piece : domainPieces) {
+                byteStream.write(piece.length());
+                byteStream.write(piece.getBytes());
+            }
+            // Write the terminating zero
+            byteStream.write(0);
+        }
     }
     // If this is the first time we've seen this domain name in the packet, write it using the DNS encoding (each segment of the domain prefixed with its length, 0 at the end), and add it to the hash map. Otherwise, write a back pointer to where the domain has been seen previously.
     // I might not need this.

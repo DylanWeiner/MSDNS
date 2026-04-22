@@ -25,7 +25,7 @@ public class DNSQuestion {
         return new DNSQuestion(domainName, decodeType, decodeClass);
     }
 
-    void writeBytes(ByteArrayOutputStream byteStream, HashMap<String,Integer> domainNameLocations) {
+    void writeBytes(ByteArrayOutputStream byteStream, HashMap<String,Integer> domainNameLocations) throws IOException {
         DNSMessage.writeDomainName(byteStream, domainNameLocations, this.domain);
 
         byteStream.write((type >> 8) & 0xff); // Places input type into the byte stream.

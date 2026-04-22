@@ -10,7 +10,7 @@ public class DNSRecord {
     int type;
     int DNSClass;
     int lifespan;
-    static byte[] data;
+    byte[] data;  // Changed from static to instance variable
     Date today;
 
     DNSRecord(String[] domain, int type, int DNSClass, int lifespan, byte[] data) {
@@ -27,11 +27,14 @@ public class DNSRecord {
 
         int decodeType = inpStr.read() << 8 | inpStr.read();
         int decodeClass = inpStr.read() << 8 | inpStr.read(); // Reads input string to retrieve the Question's type and class.
-        int lifetime = (inpStr.read() << 8 | inpStr.read()) | (inpStr.read() << 16 | inpStr.read()) | (inpStr.read() << 24 | inpStr.read());
+        // TTL is a 4-byte field
+        int lifetime = (inpStr.read() << 24) | (inpStr.read() << 16) | (inpStr.read() << 8) | inpStr.read();
+        // RDLENGTH is a 2-byte field
         int recordTime = inpStr.read() << 8 | inpStr.read();
-        data = new byte[recordTime];
+        byte[] recordData = new byte[recordTime];
+        inpStr.read(recordData);
 
-        DNSRecord record = new DNSRecord(domainName, decodeType, decodeClass, lifetime, data);
+        DNSRecord record = new DNSRecord(domainName, decodeType, decodeClass, lifetime, recordData);
 
         return record;
     }
@@ -64,9 +67,6 @@ public class DNSRecord {
     }
 
     boolean isExpired() {
-        if(System.currentTimeMillis() > (today.getTime() + lifespan * 1000L)) {
-            return true;
-        };
-        return false;
+        return System.currentTimeMillis() > (today.getTime() + lifespan * 1000L);
     }
 }
